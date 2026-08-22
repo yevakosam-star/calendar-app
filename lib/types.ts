@@ -52,3 +52,13 @@ export type Note = {
   createdAt: number;
   updatedAt: number;
 };
+
+export type AiItem = {
+  kind: 'event' | 'task';
+  title: string;
+  date: string; // yyyy-MM-dd
+  allDay?: boolean;
+  startTime?: string; // HH:mm
+  endTime?: string; // HH:mm
+  category?: TaskCategory;
+};

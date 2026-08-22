@@ -225,12 +225,34 @@ export default function CalendarScreen() {
           </ScrollView>
         )}
       </PageContainer>
+      <Pressable
+        onPress={() => router.push('/ask-ai')}
+        style={[styles.aiFab, { backgroundColor: theme.accent }]}
+        hitSlop={4}
+      >
+        <Ionicons name="sparkles" size={20} color="#fff" />
+      </Pressable>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  aiFab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
