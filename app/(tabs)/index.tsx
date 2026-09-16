@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { addDays, addMonths, addWeeks, addYears, format, isSameDay, isSameMonth } from 'date-fns';
@@ -11,6 +11,9 @@ import { PageContainer } from '../../lib/PageContainer';
 import { DayAgenda } from '../../components/DayAgenda';
 import { WeekAgenda } from '../../components/WeekAgenda';
 import { YearGrid } from '../../components/YearGrid';
+import { LOCAL_CALENDAR_ID } from '../../lib/types';
+
+type MovingItem = { kind: 'task' | 'event'; id: string; label: string; fromDate: string };
 
 type ViewMode = 'day' | 'week' | 'month' | 'year';
 const VIEW_MODES: { key: ViewMode; label: string }[] = [
@@ -22,9 +25,11 @@ const VIEW_MODES: { key: ViewMode; label: string }[] = [
 
 export default function CalendarScreen() {
   const theme = useTheme();
-  const { calendars, events, dailyNotes } = useData();
+  const { calendars, events, dailyNotes, updateLocalEvent, moveDailyNoteItem } = useData();
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [anchorDate, setAnchorDate] = useState(new Date());
+  const [movingItem, setMovingItem] = useState<MovingItem | null>(null);
+  const longPressRef = useRef(false);
 
   const visibleCalendarIds = useMemo(
     () => new Set(calendars.filter((c) => c.visible).map((c) => c.id)),
@@ -32,17 +37,31 @@ export default function CalendarScreen() {
   );
 
   const eventsByDate = useMemo(() => {
-    const map = new Map<string, { color: string }[]>();
+    const map = new Map<string, { id: string; title: string; color: string; calendarId: string }[]>();
     for (const ev of events) {
       if (!visibleCalendarIds.has(ev.calendarId)) continue;
       const cal = calendars.find((c) => c.id === ev.calendarId);
       if (!cal) continue;
       const list = map.get(ev.date) ?? [];
-      list.push({ color: cal.color });
+      list.push({ id: ev.id, title: ev.title, color: cal.color, calendarId: ev.calendarId });
       map.set(ev.date, list);
     }
     return map;
   }, [events, visibleCalendarIds, calendars]);
+
+  const startMoving = (item: MovingItem) => setMovingItem(item);
+
+  const handleCellPress = (dateKey: string) => {
+    if (movingItem) {
+      if (dateKey !== movingItem.fromDate) {
+        if (movingItem.kind === 'task') moveDailyNoteItem(movingItem.id, dateKey);
+        else updateLocalEvent(movingItem.id, { date: dateKey });
+      }
+      setMovingItem(null);
+      return;
+    }
+    router.push(`/day/${dateKey}`);
+  };
 
   const notesByDate = useMemo(() => {
     const map = new Map<string, typeof dailyNotes>();
@@ -137,7 +156,10 @@ export default function CalendarScreen() {
             return (
               <Pressable
                 key={m.key}
-                onPress={() => setViewMode(m.key)}
+                onPress={() => {
+                  setMovingItem(null);
+                  setViewMode(m.key);
+                }}
                 style={[
                   styles.modeChip,
                   { borderColor: selected ? theme.accent : theme.border },
@@ -150,7 +172,18 @@ export default function CalendarScreen() {
           })}
         </View>
 
-        {(viewMode === 'month' || viewMode === 'year') && (
+        {viewMode === 'month' && movingItem && (
+          <View style={[styles.movingBanner, { backgroundColor: theme.accent }]}>
+            <Text style={styles.movingBannerText} numberOfLines={1}>
+              Moving "{movingItem.label}" — tap a day to drop it
+            </Text>
+            <Pressable onPress={() => setMovingItem(null)} hitSlop={8}>
+              <Text style={styles.movingBannerCancel}>Cancel</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {(viewMode === 'month' || viewMode === 'year') && !movingItem && (
           <Pressable
             onPress={() => router.push(`/day/${todayKey}`)}
             style={[styles.todayCard, { backgroundColor: theme.accentSoft }]}
@@ -177,16 +210,25 @@ export default function CalendarScreen() {
               {weekRows.map((week, wi) => (
                 <View key={wi} style={styles.weekRow}>
                   {week.map((day) => {
-                    const dots = (eventsByDate.get(day.key) ?? []).slice(0, 4);
+                    const allDayEvents = eventsByDate.get(day.key) ?? [];
+                    const dots = allDayEvents.slice(0, 4);
                     const dayNotes = notesByDate.get(day.key) ?? [];
                     const notePreviews = dayNotes.slice(0, 3);
                     const extraCount = dayNotes.length - notePreviews.length;
                     const isCurrentDay = isSameDay(day.date, today);
+                    const isMovingSource = movingItem?.fromDate === day.key;
+                    const isDropTarget = !!movingItem && !isMovingSource;
+                    const movableEvent = allDayEvents.find((e) => e.calendarId === LOCAL_CALENDAR_ID);
                     return (
                       <Pressable
                         key={day.key}
-                        onPress={() => router.push(`/day/${day.key}`)}
-                        style={[styles.dayCell, { borderColor: theme.border }]}
+                        onPress={() => handleCellPress(day.key)}
+                        style={[
+                          styles.dayCell,
+                          { borderColor: theme.border },
+                          isMovingSource && { backgroundColor: theme.accentSoft },
+                          isDropTarget && { backgroundColor: `${theme.accent}0D` },
+                        ]}
                       >
                         <View style={styles.dayCellTop}>
                           <View style={[styles.dayNumberWrap, isCurrentDay && { backgroundColor: theme.accent }]}>
@@ -200,15 +242,53 @@ export default function CalendarScreen() {
                               {format(day.date, 'd')}
                             </Text>
                           </View>
-                          <View style={styles.dotsRow}>
+                          <Pressable
+                            hitSlop={6}
+                            disabled={!movableEvent || !!movingItem}
+                            delayLongPress={400}
+                            onLongPress={(e) => {
+                              if (!movableEvent) return;
+                              longPressRef.current = true;
+                              e.stopPropagation();
+                              startMoving({
+                                kind: 'event',
+                                id: movableEvent.id,
+                                label: movableEvent.title,
+                                fromDate: day.key,
+                              });
+                            }}
+                            onPress={(e) => {
+                              if (longPressRef.current) {
+                                longPressRef.current = false;
+                                e.stopPropagation();
+                              }
+                            }}
+                            style={styles.dotsRow}
+                          >
                             {dots.map((d, i) => (
                               <View key={i} style={[styles.dot, { backgroundColor: d.color }]} />
                             ))}
-                          </View>
+                          </Pressable>
                         </View>
                         <View style={styles.notePreviewList}>
                           {notePreviews.map((n) => (
-                            <View key={n.id} style={styles.notePreviewRow}>
+                            <Pressable
+                              key={n.id}
+                              disabled={!!movingItem}
+                              delayLongPress={400}
+                              onLongPress={(e) => {
+                                longPressRef.current = true;
+                                e.stopPropagation();
+                                startMoving({ kind: 'task', id: n.id, label: n.text, fromDate: n.date });
+                              }}
+                              onPress={(e) => {
+                                if (longPressRef.current) {
+                                  longPressRef.current = false;
+                                  e.stopPropagation();
+                                }
+                              }}
+                              style={styles.notePreviewRow}
+                            >
                               <View style={[styles.notePreviewDot, { backgroundColor: categoryColors[n.category] }]} />
                               <Text
                                 style={[
@@ -220,7 +300,7 @@ export default function CalendarScreen() {
                               >
                                 {n.text}
                               </Text>
-                            </View>
+                            </Pressable>
                           ))}
                           {extraCount > 0 && (
                             <Text style={[styles.notePreviewMore, { color: theme.textTertiary }]}>
@@ -306,6 +386,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   modeChipText: { fontSize: 14, fontWeight: '600' },
+  movingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    gap: 12,
+  },
+  movingBannerText: { flex: 1, fontSize: 14, fontWeight: '600', color: '#fff' },
+  movingBannerCancel: { fontSize: 14, fontWeight: '700', color: '#fff' },
   todayCard: {
     flexDirection: 'row',
     alignItems: 'center',
