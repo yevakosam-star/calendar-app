@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../lib/theme';
 import { hexToRgba } from '../lib/color';
 import { formatHourLabel, layoutTimedBlocks, parseTimeToMinutes } from '../lib/timeline';
@@ -11,10 +11,14 @@ export function DayTimeline({
   events,
   calendars,
   workingHours,
+  editableCalendarId,
+  onPressEvent,
 }: {
   events: CalendarEvent[];
   calendars: CalendarSource[];
   workingHours: WorkingHours;
+  editableCalendarId?: string;
+  onPressEvent?: (event: CalendarEvent) => void;
 }) {
   const theme = useTheme();
 
@@ -61,14 +65,22 @@ export function DayTimeline({
     <View>
       {allDay.length > 0 && (
         <View style={styles.allDayRow}>
-          {allDay.map((e) => (
-            <View key={e.id} style={[styles.allDayChip, { backgroundColor: hexToRgba(colorFor(e.calendarId), 0.14) }]}>
-              <View style={[styles.allDayDot, { backgroundColor: colorFor(e.calendarId) }]} />
-              <Text style={[styles.allDayText, { color: theme.text }]} numberOfLines={1}>
-                {e.title}
-              </Text>
-            </View>
-          ))}
+          {allDay.map((e) => {
+            const editable = e.calendarId === editableCalendarId && !!onPressEvent;
+            return (
+              <Pressable
+                key={e.id}
+                disabled={!editable}
+                onPress={() => onPressEvent?.(e)}
+                style={[styles.allDayChip, { backgroundColor: hexToRgba(colorFor(e.calendarId), 0.14) }]}
+              >
+                <View style={[styles.allDayDot, { backgroundColor: colorFor(e.calendarId) }]} />
+                <Text style={[styles.allDayText, { color: theme.text }]} numberOfLines={1}>
+                  {e.title}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       )}
 
@@ -116,10 +128,13 @@ export function DayTimeline({
             const column = pos?.column ?? 0;
             const widthPct = 100 / columnCount;
             const color = colorFor(e.calendarId);
+            const editable = e.calendarId === editableCalendarId && !!onPressEvent;
 
             return (
-              <View
+              <Pressable
                 key={e.id}
+                disabled={!editable}
+                onPress={() => onPressEvent?.(e)}
                 style={[
                   styles.eventBlock,
                   {
@@ -140,7 +155,7 @@ export function DayTimeline({
                     {e.startTime}–{e.endTime} · {nameFor(e.calendarId)}
                   </Text>
                 )}
-              </View>
+              </Pressable>
             );
           })}
         </View>

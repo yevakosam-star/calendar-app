@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { addDays, format, parseISO } from 'date-fns';
 import { useTheme, categoryColors, categoryLabels } from '../lib/theme';
 import { useData } from '../lib/store';
-import { DailyNoteItem, TaskCategory } from '../lib/types';
+import { CalendarEvent, DailyNoteItem, LOCAL_CALENDAR_ID, TaskCategory } from '../lib/types';
 import { DayTimeline } from './DayTimeline';
 
 const CATEGORY_ORDER: TaskCategory[] = ['work', 'personal', 'content'];
@@ -22,6 +23,8 @@ export function DayAgenda({ date }: { date: string }) {
     updateDailyNoteItem,
     setDailyNoteCategory,
     addLocalEvent,
+    updateLocalEvent,
+    deleteLocalEvent,
   } = useData();
   const [draft, setDraft] = useState('');
   const [draftCategory, setDraftCategory] = useState<TaskCategory>('personal');
@@ -29,7 +32,9 @@ export function DayAgenda({ date }: { date: string }) {
   const [editingText, setEditingText] = useState('');
 
   const [showEventForm, setShowEventForm] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [eventTitle, setEventTitle] = useState('');
+  const [eventDate, setEventDate] = useState(date);
   const [eventAllDay, setEventAllDay] = useState(false);
   const [eventStart, setEventStart] = useState('09:00');
   const [eventEnd, setEventEnd] = useState('10:00');
@@ -71,27 +76,69 @@ export function DayAgenda({ date }: { date: string }) {
 
   const canSubmitEvent = eventTitle.trim().length > 0 && (eventAllDay || (TIME_PATTERN.test(eventStart) && TIME_PATTERN.test(eventEnd)));
 
-  const submitEvent = () => {
-    if (!canSubmitEvent) return;
-    addLocalEvent({
-      date,
-      title: eventTitle,
-      allDay: eventAllDay,
-      startTime: eventStart,
-      endTime: eventEnd,
-    });
+  const resetEventForm = () => {
     setEventTitle('');
+    setEventDate(date);
     setEventAllDay(false);
     setEventStart('09:00');
     setEventEnd('10:00');
+    setEditingEventId(null);
     setShowEventForm(false);
+  };
+
+  const openAddEvent = () => {
+    setEventDate(date);
+    setShowEventForm(true);
+  };
+
+  const openEditEvent = (event: CalendarEvent) => {
+    if (event.calendarId !== LOCAL_CALENDAR_ID) return;
+    setEditingEventId(event.id);
+    setEventTitle(event.title);
+    setEventDate(event.date);
+    setEventAllDay(event.allDay);
+    setEventStart(event.startTime ?? '09:00');
+    setEventEnd(event.endTime ?? '10:00');
+    setShowEventForm(true);
+  };
+
+  const submitEvent = () => {
+    if (!canSubmitEvent) return;
+    if (editingEventId) {
+      updateLocalEvent(editingEventId, {
+        title: eventTitle,
+        date: eventDate,
+        allDay: eventAllDay,
+        startTime: eventAllDay ? undefined : eventStart,
+        endTime: eventAllDay ? undefined : eventEnd,
+      });
+    } else {
+      addLocalEvent({
+        date: eventDate,
+        title: eventTitle,
+        allDay: eventAllDay,
+        startTime: eventStart,
+        endTime: eventEnd,
+      });
+    }
+    resetEventForm();
+  };
+
+  const deleteEditingEvent = () => {
+    if (!editingEventId) return;
+    deleteLocalEvent(editingEventId);
+    resetEventForm();
   };
 
   return (
     <View>
       <View style={styles.sectionHeaderRow}>
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Schedule</Text>
-        <Pressable onPress={() => setShowEventForm((v) => !v)} hitSlop={8} style={styles.addEventButton}>
+        <Pressable
+          onPress={() => (showEventForm ? resetEventForm() : openAddEvent())}
+          hitSlop={8}
+          style={styles.addEventButton}
+        >
           <Ionicons name={showEventForm ? 'close' : 'add'} size={16} color={theme.accent} />
           <Text style={[styles.addEventButtonText, { color: theme.accent }]}>
             {showEventForm ? 'Cancel' : 'Add event'}
@@ -109,6 +156,27 @@ export function DayAgenda({ date }: { date: string }) {
             style={[styles.eventTitleInput, { color: theme.text, borderColor: theme.border }]}
             autoFocus
           />
+          {editingEventId && (
+            <View style={styles.dateStepperRow}>
+              <Pressable
+                onPress={() => setEventDate(format(addDays(parseISO(eventDate), -1), 'yyyy-MM-dd'))}
+                style={[styles.dateStepperButton, { borderColor: theme.border }]}
+                hitSlop={8}
+              >
+                <Ionicons name="chevron-back" size={14} color={theme.text} />
+              </Pressable>
+              <Text style={[styles.dateStepperLabel, { color: theme.text }]}>
+                {format(parseISO(eventDate), 'EEE, MMM d, yyyy')}
+              </Text>
+              <Pressable
+                onPress={() => setEventDate(format(addDays(parseISO(eventDate), 1), 'yyyy-MM-dd'))}
+                style={[styles.dateStepperButton, { borderColor: theme.border }]}
+                hitSlop={8}
+              >
+                <Ionicons name="chevron-forward" size={14} color={theme.text} />
+              </Pressable>
+            </View>
+          )}
           <View style={styles.eventAllDayRow}>
             <Text style={[styles.eventAllDayLabel, { color: theme.text }]}>All day</Text>
             <Switch
@@ -137,25 +205,37 @@ export function DayAgenda({ date }: { date: string }) {
               />
             </View>
           )}
-          <Pressable
-            onPress={submitEvent}
-            disabled={!canSubmitEvent}
-            style={[styles.eventSubmit, { backgroundColor: canSubmitEvent ? theme.accent : theme.border }]}
-          >
-            <Text style={[styles.eventSubmitText, { color: canSubmitEvent ? '#fff' : theme.textTertiary }]}>
-              Add to calendar
-            </Text>
-          </Pressable>
+          <View style={styles.eventFormActionsRow}>
+            {editingEventId && (
+              <Pressable onPress={deleteEditingEvent} style={[styles.eventDeleteButton, { borderColor: theme.border }]}>
+                <Ionicons name="trash-outline" size={16} color={theme.danger} />
+              </Pressable>
+            )}
+            <Pressable
+              onPress={submitEvent}
+              disabled={!canSubmitEvent}
+              style={[
+                styles.eventSubmit,
+                { flex: 1, backgroundColor: canSubmitEvent ? theme.accent : theme.border },
+              ]}
+            >
+              <Text style={[styles.eventSubmitText, { color: canSubmitEvent ? '#fff' : theme.textTertiary }]}>
+                {editingEventId ? 'Save changes' : 'Add to calendar'}
+              </Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
-      {dayEvents.length === 0 ? (
-        <Text style={[styles.emptyText, { color: theme.textTertiary }]}>No events today</Text>
-      ) : (
-        <View style={{ marginTop: 12 }}>
-          <DayTimeline events={dayEvents} calendars={calendars} workingHours={workingHours} />
-        </View>
-      )}
+      <View style={{ marginTop: 12 }}>
+        <DayTimeline
+          events={dayEvents}
+          calendars={calendars}
+          workingHours={workingHours}
+          editableCalendarId={LOCAL_CALENDAR_ID}
+          onPressEvent={openEditEvent}
+        />
+      </View>
 
       <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
@@ -284,6 +364,25 @@ const styles = StyleSheet.create({
   eventTimeInput: { flex: 1, fontSize: 14, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, textAlign: 'center' },
   eventSubmit: { borderRadius: 10, paddingVertical: 10, alignItems: 'center' },
   eventSubmitText: { fontSize: 14, fontWeight: '600' },
+  eventFormActionsRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  eventDeleteButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateStepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dateStepperButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dateStepperLabel: { fontSize: 13, fontWeight: '600' },
   sectionHint: { fontSize: 13, marginTop: 2 },
   emptyText: { fontSize: 14, marginTop: 8, marginBottom: 4 },
   divider: { height: 1, marginTop: 20 },
