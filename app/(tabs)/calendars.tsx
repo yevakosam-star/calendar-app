@@ -245,7 +245,7 @@ export default function CalendarsScreen() {
           </View>
           <Text style={[styles.sectionHint, { color: theme.textTertiary }]}>
             Paste a calendar's secret iCal link (Google Calendar → Settings → your calendar → Integrate calendar).
-            Read-only, and fetched through a public proxy on web.
+            Read-only.
           </Text>
 
           {showIcsForm && (
