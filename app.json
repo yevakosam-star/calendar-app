@@ -27,14 +27,7 @@
     "plugins": [
       "expo-router",
       "expo-status-bar",
-      "expo-web-browser",
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Let you pick a photo of a schedule to add events from.",
-          "cameraPermission": "Let you take a photo of a schedule to add events from."
-        }
-      ]
+      "expo-web-browser"
     ]
   }
 }
