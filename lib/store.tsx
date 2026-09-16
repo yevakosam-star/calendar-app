@@ -1,6 +1,7 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { addDays } from 'date-fns';
 import { loadJSON, saveJSON } from './storage';
+import { fetchCloudState, pushCloudState } from './cloudSync';
 import { calendarColors, localCalendarColor } from './theme';
 import {
   CalendarEvent,
@@ -38,6 +39,20 @@ const LOCAL_CALENDAR: CalendarSource = {
 const DEFAULT_ICS_CALENDARS: { name: string; url: string }[] = [
   { name: 'Valencia Holidays', url: 'https://www.officeholidays.com/ics/spain/valenciana' },
 ];
+
+// Everything that syncs to the cloud store — single-user, so this is the whole app's data.
+type SyncedSnapshot = {
+  accounts: GoogleAccount[];
+  calendars: CalendarSource[];
+  dailyNotes: DailyNoteItem[];
+  notes: Note[];
+  localEvents: CalendarEvent[];
+  googleEvents: CalendarEvent[];
+  icsEvents: CalendarEvent[];
+  googleToken: { accessToken: string; expiresAt: number } | null;
+  workingHours: WorkingHours;
+  updatedAt: number;
+};
 
 type State = {
   accounts: GoogleAccount[];
@@ -87,7 +102,10 @@ type Ctx = State & {
     startTime?: string;
     endTime?: string;
   }) => void;
-  updateLocalEvent: (id: string, patch: Partial<Pick<CalendarEvent, 'title' | 'startTime' | 'endTime' | 'allDay'>>) => void;
+  updateLocalEvent: (
+    id: string,
+    patch: Partial<Pick<CalendarEvent, 'title' | 'date' | 'startTime' | 'endTime' | 'allDay'>>
+  ) => void;
   deleteLocalEvent: (id: string) => void;
 };
 
@@ -118,6 +136,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [request, response, promptAsync] = useGoogleAuthRequest();
+  const [cloudReady, setCloudReady] = useState(false);
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -200,6 +220,75 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (state.loaded) saveJSON('workingHours', state.workingHours);
   }, [state.workingHours, state.loaded]);
+
+  // Once local data is loaded, pull the cloud copy and let it win — this is
+  // what makes the same data show up across your phone and laptop.
+  useEffect(() => {
+    if (!state.loaded) return;
+    (async () => {
+      const cloud = await fetchCloudState<SyncedSnapshot>();
+      if (cloud) {
+        const cloudTokenValid = !!cloud.googleToken && cloud.googleToken.expiresAt > Date.now();
+        setState((prev) => ({
+          ...prev,
+          accounts: cloud.accounts ?? prev.accounts,
+          calendars: cloud.calendars ?? prev.calendars,
+          dailyNotes: cloud.dailyNotes ?? prev.dailyNotes,
+          notes: cloud.notes ?? prev.notes,
+          localEvents: cloud.localEvents ?? prev.localEvents,
+          googleEvents: cloudTokenValid ? cloud.googleEvents ?? prev.googleEvents : prev.googleEvents,
+          icsEvents: cloud.icsEvents ?? prev.icsEvents,
+          workingHours: cloud.workingHours ?? prev.workingHours,
+          googleAccessToken: cloudTokenValid ? cloud.googleToken!.accessToken : prev.googleAccessToken,
+          googleTokenExpiresAt: cloudTokenValid ? cloud.googleToken!.expiresAt : prev.googleTokenExpiresAt,
+          googleNeedsReauth: (cloud.accounts?.length ?? 0) > 0 && !cloudTokenValid,
+        }));
+      }
+      setCloudReady(true);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.loaded]);
+
+  // Debounced push of the full snapshot to the cloud on any change, once the
+  // initial cloud merge above has happened (so we never overwrite it with stale local data first).
+  useEffect(() => {
+    if (!state.loaded || !cloudReady) return;
+    if (pushTimer.current) clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(() => {
+      const snapshot: SyncedSnapshot = {
+        accounts: state.accounts,
+        calendars: state.calendars,
+        dailyNotes: state.dailyNotes,
+        notes: state.notes,
+        localEvents: state.localEvents,
+        googleEvents: state.googleEvents,
+        icsEvents: state.icsEvents,
+        googleToken:
+          state.googleAccessToken && state.googleTokenExpiresAt
+            ? { accessToken: state.googleAccessToken, expiresAt: state.googleTokenExpiresAt }
+            : null,
+        workingHours: state.workingHours,
+        updatedAt: Date.now(),
+      };
+      pushCloudState(snapshot);
+    }, 1200);
+    return () => {
+      if (pushTimer.current) clearTimeout(pushTimer.current);
+    };
+  }, [
+    state.accounts,
+    state.calendars,
+    state.dailyNotes,
+    state.notes,
+    state.localEvents,
+    state.googleEvents,
+    state.icsEvents,
+    state.googleAccessToken,
+    state.googleTokenExpiresAt,
+    state.workingHours,
+    state.loaded,
+    cloudReady,
+  ]);
 
   const fetchAllGoogleEvents = useCallback(async (accessToken: string, cals: CalendarSource[]) => {
     const timeMin = addDays(new Date(), -60).toISOString();
@@ -383,27 +472,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     });
   }, [fetchIcsEventsForCalendar]);
 
-  // Refresh imported calendars once on cold start so data isn't stale from last session.
+  // Refresh imported calendars once the cloud merge has settled, so we're not
+  // refreshing a set that's about to be replaced by the cloud's calendar list.
   useEffect(() => {
-    if (state.loaded && icsCalendars.length > 0) {
+    if (cloudReady && icsCalendars.length > 0) {
       refreshIcsCalendars();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.loaded]);
+  }, [cloudReady]);
 
-  // Seed default imported calendars once, ever, on first launch — never re-added if the user removes them.
+  // Seed default imported calendars once, ever — judged by whether any ICS calendar
+  // already exists after the cloud merge, so a second device never gets a duplicate.
   useEffect(() => {
-    if (!state.loaded) return;
+    if (!cloudReady) return;
+    if (icsCalendars.length > 0) return;
     (async () => {
-      const seeded = await loadJSON<boolean>('defaultIcsSeeded', false);
-      if (seeded) return;
-      await saveJSON('defaultIcsSeeded', true);
       for (const cal of DEFAULT_ICS_CALENDARS) {
         await addIcsCalendar(cal.name, cal.url);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.loaded]);
+  }, [cloudReady]);
 
   const toggleCalendarVisibility = useCallback((calendarId: string) => {
     setState((prev) => ({
@@ -505,7 +594,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateLocalEvent = useCallback(
-    (id: string, patch: Partial<Pick<CalendarEvent, 'title' | 'startTime' | 'endTime' | 'allDay'>>) => {
+    (id: string, patch: Partial<Pick<CalendarEvent, 'title' | 'date' | 'startTime' | 'endTime' | 'allDay'>>) => {
       setState((prev) => ({
         ...prev,
         localEvents: prev.localEvents.map((e) => (e.id === id ? { ...e, ...patch } : e)),
