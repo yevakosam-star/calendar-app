@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { addDays } from 'date-fns';
 import { loadJSON, saveJSON } from './storage';
 import { fetchCloudState, pushCloudState } from './cloudSync';
-import { calendarColors, localCalendarColor } from './theme';
+import { categoryColors, localCalendarColor } from './theme';
 import {
   CalendarEvent,
   CalendarSource,
@@ -317,11 +317,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       try {
         const profile = await fetchGoogleUserInfo(result.accessToken);
         const list = await fetchGoogleCalendarList(result.accessToken);
-        const newCalendars: CalendarSource[] = list.map((entry, i) => ({
+        const newCalendars: CalendarSource[] = list.map((entry) => ({
           id: entry.id,
           accountId: GOOGLE_ACCOUNT_ID,
           name: entry.summary,
-          color: entry.backgroundColor || calendarColors[i % calendarColors.length],
+          color: categoryColors.work,
           visible: true,
         }));
         const events = await fetchAllGoogleEvents(result.accessToken, newCalendars);
@@ -420,21 +420,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           id: `ics-${uid()}`,
           accountId: ICS_ACCOUNT_ID,
           name: trimmedName,
-          color: calendarColors[0],
+          color: categoryColors.work,
           visible: true,
           sourceUrl: trimmedUrl,
         };
         const fetchedEvents = await fetchIcsEventsForCalendar(newCalendar);
-        setState((prev) => {
-          const usedColors = prev.calendars.length;
-          const coloredCalendar = { ...newCalendar, color: calendarColors[usedColors % calendarColors.length] };
-          return {
-            ...prev,
-            calendars: [...prev.calendars, coloredCalendar],
-            icsEvents: [...prev.icsEvents.filter((e) => e.calendarId !== newCalendar.id), ...fetchedEvents],
-            icsLoading: false,
-          };
-        });
+        setState((prev) => ({
+          ...prev,
+          calendars: [...prev.calendars, newCalendar],
+          icsEvents: [...prev.icsEvents.filter((e) => e.calendarId !== newCalendar.id), ...fetchedEvents],
+          icsLoading: false,
+        }));
       } catch (err) {
         setState((prev) => ({
           ...prev,
