@@ -109,7 +109,7 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <PageContainer>
+      <PageContainer style={{ maxWidth: '100%' }}>
         <View style={styles.header}>
           <Text style={[styles.monthLabel, { color: theme.text }]} numberOfLines={1}>
             {headerTitle}
