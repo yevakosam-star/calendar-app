@@ -132,114 +132,7 @@ export function DayAgenda({ date }: { date: string }) {
 
   return (
     <View>
-      <View style={styles.sectionHeaderRow}>
-        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Schedule</Text>
-        <Pressable
-          onPress={() => (showEventForm ? resetEventForm() : openAddEvent())}
-          hitSlop={8}
-          style={styles.addEventButton}
-        >
-          <Ionicons name={showEventForm ? 'close' : 'add'} size={16} color={theme.accent} />
-          <Text style={[styles.addEventButtonText, { color: theme.accent }]}>
-            {showEventForm ? 'Cancel' : 'Add event'}
-          </Text>
-        </Pressable>
-      </View>
-
-      {showEventForm && (
-        <View style={[styles.eventForm, { borderColor: theme.border }]}>
-          <TextInput
-            value={eventTitle}
-            onChangeText={setEventTitle}
-            placeholder="Event title"
-            placeholderTextColor={theme.textTertiary}
-            style={[styles.eventTitleInput, { color: theme.text, borderColor: theme.border }]}
-            autoFocus
-          />
-          {editingEventId && (
-            <View style={styles.dateStepperRow}>
-              <Pressable
-                onPress={() => setEventDate(format(addDays(parseISO(eventDate), -1), 'yyyy-MM-dd'))}
-                style={[styles.dateStepperButton, { borderColor: theme.border }]}
-                hitSlop={8}
-              >
-                <Ionicons name="chevron-back" size={14} color={theme.text} />
-              </Pressable>
-              <Text style={[styles.dateStepperLabel, { color: theme.text }]}>
-                {format(parseISO(eventDate), 'EEE, MMM d, yyyy')}
-              </Text>
-              <Pressable
-                onPress={() => setEventDate(format(addDays(parseISO(eventDate), 1), 'yyyy-MM-dd'))}
-                style={[styles.dateStepperButton, { borderColor: theme.border }]}
-                hitSlop={8}
-              >
-                <Ionicons name="chevron-forward" size={14} color={theme.text} />
-              </Pressable>
-            </View>
-          )}
-          <View style={styles.eventAllDayRow}>
-            <Text style={[styles.eventAllDayLabel, { color: theme.text }]}>All day</Text>
-            <Switch
-              value={eventAllDay}
-              onValueChange={setEventAllDay}
-              trackColor={{ false: theme.border, true: theme.accent }}
-              thumbColor="#fff"
-            />
-          </View>
-          {!eventAllDay && (
-            <View style={styles.eventTimesRow}>
-              <TextInput
-                value={eventStart}
-                onChangeText={setEventStart}
-                placeholder="09:00"
-                placeholderTextColor={theme.textTertiary}
-                style={[styles.eventTimeInput, { color: theme.text, borderColor: theme.border }]}
-              />
-              <Text style={{ color: theme.textTertiary }}>–</Text>
-              <TextInput
-                value={eventEnd}
-                onChangeText={setEventEnd}
-                placeholder="10:00"
-                placeholderTextColor={theme.textTertiary}
-                style={[styles.eventTimeInput, { color: theme.text, borderColor: theme.border }]}
-              />
-            </View>
-          )}
-          <View style={styles.eventFormActionsRow}>
-            {editingEventId && (
-              <Pressable onPress={deleteEditingEvent} style={[styles.eventDeleteButton, { borderColor: theme.border }]}>
-                <Ionicons name="trash-outline" size={16} color={theme.danger} />
-              </Pressable>
-            )}
-            <Pressable
-              onPress={submitEvent}
-              disabled={!canSubmitEvent}
-              style={[
-                styles.eventSubmit,
-                { flex: 1, backgroundColor: canSubmitEvent ? theme.accent : theme.border },
-              ]}
-            >
-              <Text style={[styles.eventSubmitText, { color: canSubmitEvent ? '#fff' : theme.textTertiary }]}>
-                {editingEventId ? 'Save changes' : 'Add to calendar'}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
-      <View style={{ marginTop: 12 }}>
-        <DayTimeline
-          events={dayEvents}
-          calendars={calendars}
-          workingHours={workingHours}
-          editableCalendarId={LOCAL_CALENDAR_ID}
-          onPressEvent={openEditEvent}
-        />
-      </View>
-
-      <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-      <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginTop: 20 }]}>Notes for the day</Text>
+      <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Notes for the day</Text>
       <Text style={[styles.sectionHint, { color: theme.textTertiary }]}>
         Jot down tasks with no fixed time. Tap the dot to change category.
       </Text>
@@ -346,6 +239,113 @@ export function DayAgenda({ date }: { date: string }) {
             <Ionicons name="arrow-up-circle" size={22} color={theme.accent} />
           </Pressable>
         )}
+      </View>
+
+      <View style={[styles.divider, { backgroundColor: theme.border, marginTop: 20 }]} />
+
+      <View style={[styles.sectionHeaderRow, { marginTop: 20 }]}>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Schedule</Text>
+        <Pressable
+          onPress={() => (showEventForm ? resetEventForm() : openAddEvent())}
+          hitSlop={8}
+          style={styles.addEventButton}
+        >
+          <Ionicons name={showEventForm ? 'close' : 'add'} size={16} color={theme.accent} />
+          <Text style={[styles.addEventButtonText, { color: theme.accent }]}>
+            {showEventForm ? 'Cancel' : 'Add event'}
+          </Text>
+        </Pressable>
+      </View>
+
+      {showEventForm && (
+        <View style={[styles.eventForm, { borderColor: theme.border }]}>
+          <TextInput
+            value={eventTitle}
+            onChangeText={setEventTitle}
+            placeholder="Event title"
+            placeholderTextColor={theme.textTertiary}
+            style={[styles.eventTitleInput, { color: theme.text, borderColor: theme.border }]}
+            autoFocus
+          />
+          {editingEventId && (
+            <View style={styles.dateStepperRow}>
+              <Pressable
+                onPress={() => setEventDate(format(addDays(parseISO(eventDate), -1), 'yyyy-MM-dd'))}
+                style={[styles.dateStepperButton, { borderColor: theme.border }]}
+                hitSlop={8}
+              >
+                <Ionicons name="chevron-back" size={14} color={theme.text} />
+              </Pressable>
+              <Text style={[styles.dateStepperLabel, { color: theme.text }]}>
+                {format(parseISO(eventDate), 'EEE, MMM d, yyyy')}
+              </Text>
+              <Pressable
+                onPress={() => setEventDate(format(addDays(parseISO(eventDate), 1), 'yyyy-MM-dd'))}
+                style={[styles.dateStepperButton, { borderColor: theme.border }]}
+                hitSlop={8}
+              >
+                <Ionicons name="chevron-forward" size={14} color={theme.text} />
+              </Pressable>
+            </View>
+          )}
+          <View style={styles.eventAllDayRow}>
+            <Text style={[styles.eventAllDayLabel, { color: theme.text }]}>All day</Text>
+            <Switch
+              value={eventAllDay}
+              onValueChange={setEventAllDay}
+              trackColor={{ false: theme.border, true: theme.accent }}
+              thumbColor="#fff"
+            />
+          </View>
+          {!eventAllDay && (
+            <View style={styles.eventTimesRow}>
+              <TextInput
+                value={eventStart}
+                onChangeText={setEventStart}
+                placeholder="09:00"
+                placeholderTextColor={theme.textTertiary}
+                style={[styles.eventTimeInput, { color: theme.text, borderColor: theme.border }]}
+              />
+              <Text style={{ color: theme.textTertiary }}>–</Text>
+              <TextInput
+                value={eventEnd}
+                onChangeText={setEventEnd}
+                placeholder="10:00"
+                placeholderTextColor={theme.textTertiary}
+                style={[styles.eventTimeInput, { color: theme.text, borderColor: theme.border }]}
+              />
+            </View>
+          )}
+          <View style={styles.eventFormActionsRow}>
+            {editingEventId && (
+              <Pressable onPress={deleteEditingEvent} style={[styles.eventDeleteButton, { borderColor: theme.border }]}>
+                <Ionicons name="trash-outline" size={16} color={theme.danger} />
+              </Pressable>
+            )}
+            <Pressable
+              onPress={submitEvent}
+              disabled={!canSubmitEvent}
+              style={[
+                styles.eventSubmit,
+                { flex: 1, backgroundColor: canSubmitEvent ? theme.accent : theme.border },
+              ]}
+            >
+              <Text style={[styles.eventSubmitText, { color: canSubmitEvent ? '#fff' : theme.textTertiary }]}>
+                {editingEventId ? 'Save changes' : 'Add to calendar'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      <View style={{ marginTop: 12 }}>
+        <DayTimeline
+          events={dayEvents}
+          calendars={calendars}
+          workingHours={workingHours}
+          editableCalendarId={LOCAL_CALENDAR_ID}
+          onPressEvent={openEditEvent}
+        />
       </View>
     </View>
   );

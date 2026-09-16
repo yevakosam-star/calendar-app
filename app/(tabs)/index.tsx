@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { addDays, addMonths, addWeeks, addYears, format, isSameDay, isSameMonth } from 'date-fns';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../lib/theme';
+import { useTheme, categoryColors } from '../../lib/theme';
 import { useData } from '../../lib/store';
 import { getMonthGrid, getWeekDays, WEEKDAY_LABELS } from '../../lib/dateGrid';
 import { PageContainer } from '../../lib/PageContainer';
@@ -45,9 +45,13 @@ export default function CalendarScreen() {
   }, [events, visibleCalendarIds, calendars]);
 
   const notesByDate = useMemo(() => {
-    const set = new Set<string>();
-    for (const n of dailyNotes) set.add(n.date);
-    return set;
+    const map = new Map<string, typeof dailyNotes>();
+    for (const n of dailyNotes) {
+      const list = map.get(n.date) ?? [];
+      list.push(n);
+      map.set(n.date, list);
+    }
+    return map;
   }, [dailyNotes]);
 
   const today = new Date();
@@ -65,6 +69,11 @@ export default function CalendarScreen() {
           .join(' · ');
 
   const grid = useMemo(() => getMonthGrid(anchorDate), [anchorDate]);
+  const weekRows = useMemo(() => {
+    const rows: (typeof grid)[] = [];
+    for (let i = 0; i < grid.length; i += 7) rows.push(grid.slice(i, i + 7));
+    return rows;
+  }, [grid]);
   const weekDays = useMemo(() => getWeekDays(anchorDate), [anchorDate]);
 
   const headerTitle = useMemo(() => {
@@ -155,7 +164,7 @@ export default function CalendarScreen() {
         )}
 
         {viewMode === 'month' && (
-          <>
+          <View style={{ flex: 1 }}>
             <View style={styles.weekdayRow}>
               {WEEKDAY_LABELS.map((label, i) => (
                 <View key={i} style={styles.weekdayCell}>
@@ -164,39 +173,68 @@ export default function CalendarScreen() {
               ))}
             </View>
 
-            <ScrollView contentContainerStyle={styles.gridScroll}>
-              <View style={styles.grid}>
-                {grid.map((day) => {
-                  const dots = (eventsByDate.get(day.key) ?? []).slice(0, 4);
-                  const hasNote = notesByDate.has(day.key);
-                  const isCurrentDay = isSameDay(day.date, today);
-                  return (
-                    <Pressable key={day.key} onPress={() => router.push(`/day/${day.key}`)} style={styles.dayCell}>
-                      <View style={[styles.dayNumberWrap, isCurrentDay && { backgroundColor: theme.accent }]}>
-                        <Text
-                          style={[
-                            styles.dayNumber,
-                            { color: day.inMonth ? theme.text : theme.textTertiary },
-                            isCurrentDay && { color: '#fff' },
-                          ]}
-                        >
-                          {format(day.date, 'd')}
-                        </Text>
-                      </View>
-                      <View style={styles.dotsRow}>
-                        {dots.map((d, i) => (
-                          <View key={i} style={[styles.dot, { backgroundColor: d.color }]} />
-                        ))}
-                        {hasNote && (
-                          <Ionicons name="reader-outline" size={10} color={theme.textSecondary} style={{ marginLeft: 2 }} />
-                        )}
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </ScrollView>
-          </>
+            <View style={[styles.gridContainer, { borderColor: theme.border }]}>
+              {weekRows.map((week, wi) => (
+                <View key={wi} style={styles.weekRow}>
+                  {week.map((day) => {
+                    const dots = (eventsByDate.get(day.key) ?? []).slice(0, 4);
+                    const dayNotes = notesByDate.get(day.key) ?? [];
+                    const notePreviews = dayNotes.slice(0, 3);
+                    const extraCount = dayNotes.length - notePreviews.length;
+                    const isCurrentDay = isSameDay(day.date, today);
+                    return (
+                      <Pressable
+                        key={day.key}
+                        onPress={() => router.push(`/day/${day.key}`)}
+                        style={[styles.dayCell, { borderColor: theme.border }]}
+                      >
+                        <View style={styles.dayCellTop}>
+                          <View style={[styles.dayNumberWrap, isCurrentDay && { backgroundColor: theme.accent }]}>
+                            <Text
+                              style={[
+                                styles.dayNumber,
+                                { color: day.inMonth ? theme.text : theme.textTertiary },
+                                isCurrentDay && { color: '#fff' },
+                              ]}
+                            >
+                              {format(day.date, 'd')}
+                            </Text>
+                          </View>
+                          <View style={styles.dotsRow}>
+                            {dots.map((d, i) => (
+                              <View key={i} style={[styles.dot, { backgroundColor: d.color }]} />
+                            ))}
+                          </View>
+                        </View>
+                        <View style={styles.notePreviewList}>
+                          {notePreviews.map((n) => (
+                            <View key={n.id} style={styles.notePreviewRow}>
+                              <View style={[styles.notePreviewDot, { backgroundColor: categoryColors[n.category] }]} />
+                              <Text
+                                style={[
+                                  styles.notePreviewText,
+                                  { color: n.done ? theme.textTertiary : theme.text },
+                                  n.done && { textDecorationLine: 'line-through' },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {n.text}
+                              </Text>
+                            </View>
+                          ))}
+                          {extraCount > 0 && (
+                            <Text style={[styles.notePreviewMore, { color: theme.textTertiary }]}>
+                              +{extraCount} more
+                            </Text>
+                          )}
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          </View>
         )}
 
         {viewMode === 'day' && (
@@ -305,23 +343,37 @@ const styles = StyleSheet.create({
   weekdayRow: { flexDirection: 'row', paddingHorizontal: 12 },
   weekdayCell: { flex: 1, alignItems: 'center', paddingBottom: 8 },
   weekdayText: { fontSize: 11, fontWeight: '600' },
-  gridScroll: { paddingHorizontal: 8, paddingBottom: 24 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
-  dayCell: {
-    width: `${100 / 7}%`,
-    aspectRatio: 0.82,
-    alignItems: 'center',
-    paddingTop: 6,
-    gap: 4,
+  gridContainer: {
+    flex: 1,
+    marginHorizontal: 8,
+    marginBottom: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: StyleSheet.hairlineWidth,
   },
+  weekRow: { flex: 1, flexDirection: 'row' },
+  dayCell: {
+    flex: 1,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingBottom: 2,
+    overflow: 'hidden',
+  },
+  dayCellTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   dayNumberWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dayNumber: { fontSize: 14, fontWeight: '500' },
-  dotsRow: { flexDirection: 'row', alignItems: 'center', minHeight: 8, gap: 3 },
-  dot: { width: 5, height: 5, borderRadius: 2.5 },
+  dayNumber: { fontSize: 12.5, fontWeight: '500' },
+  dotsRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 2, maxWidth: 28 },
+  dot: { width: 4.5, height: 4.5, borderRadius: 2.25 },
+  notePreviewList: { marginTop: 3, gap: 1.5 },
+  notePreviewRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  notePreviewDot: { width: 4, height: 4, borderRadius: 2 },
+  notePreviewText: { fontSize: 9, flexShrink: 1 },
+  notePreviewMore: { fontSize: 8.5, marginTop: 1 },
 });
