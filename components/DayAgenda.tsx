@@ -22,6 +22,7 @@ export function DayAgenda({ date }: { date: string }) {
     deleteDailyNoteItem,
     updateDailyNoteItem,
     setDailyNoteCategory,
+    moveDailyNoteItem,
     addLocalEvent,
     updateLocalEvent,
     deleteLocalEvent,
@@ -30,6 +31,7 @@ export function DayAgenda({ date }: { date: string }) {
   const [draftCategory, setDraftCategory] = useState<TaskCategory>('personal');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [movingId, setMovingId] = useState<string | null>(null);
 
   const [showEventForm, setShowEventForm] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -72,6 +74,10 @@ export function DayAgenda({ date }: { date: string }) {
   const cycleCategory = (item: DailyNoteItem) => {
     const idx = CATEGORY_ORDER.indexOf(item.category);
     setDailyNoteCategory(item.id, CATEGORY_ORDER[(idx + 1) % CATEGORY_ORDER.length]);
+  };
+
+  const shiftTaskDate = (item: DailyNoteItem, days: number) => {
+    moveDailyNoteItem(item.id, format(addDays(parseISO(item.date), days), 'yyyy-MM-dd'));
   };
 
   const canSubmitEvent = eventTitle.trim().length > 0 && (eventAllDay || (TIME_PATTERN.test(eventStart) && TIME_PATTERN.test(eventEnd)));
@@ -132,9 +138,10 @@ export function DayAgenda({ date }: { date: string }) {
 
   return (
     <View>
-      <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Notes for the day</Text>
+      <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Tasks</Text>
       <Text style={[styles.sectionHint, { color: theme.textTertiary }]}>
-        Jot down tasks with no fixed time. Tap the dot to change category.
+        Jot down tasks with no fixed time. Tap the dot to change category, or the calendar icon to move a
+        task to another day.
       </Text>
 
       <View style={{ marginTop: 12, gap: 16 }}>
@@ -146,48 +153,85 @@ export function DayAgenda({ date }: { date: string }) {
             </View>
             <View style={{ gap: 2 }}>
               {notesByCategory[cat].map((item) => (
-                <View key={item.id} style={styles.noteRow}>
-                  <Pressable onPress={() => cycleCategory(item)} hitSlop={8}>
-                    <View style={[styles.smallDot, { backgroundColor: categoryColors[item.category] }]} />
-                  </Pressable>
-                  <Pressable onPress={() => toggleDailyNoteItem(item.id)} hitSlop={8}>
-                    <Ionicons
-                      name={item.done ? 'checkbox' : 'square-outline'}
-                      size={20}
-                      color={item.done ? theme.accent : theme.textTertiary}
-                    />
-                  </Pressable>
-                  {editingId === item.id ? (
-                    <TextInput
-                      value={editingText}
-                      onChangeText={setEditingText}
-                      onSubmitEditing={() => commitEdit(item)}
-                      onBlur={() => commitEdit(item)}
-                      autoFocus
-                      style={[styles.noteInput, { color: theme.text, borderColor: theme.border }]}
-                    />
-                  ) : (
-                    <Pressable
-                      style={{ flex: 1 }}
-                      onPress={() => {
-                        setEditingId(item.id);
-                        setEditingText(item.text);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.noteText,
-                          { color: item.done ? theme.textTertiary : theme.text },
-                          item.done && styles.noteTextDone,
-                        ]}
-                      >
-                        {item.text}
-                      </Text>
+                <View key={item.id}>
+                  <View style={styles.noteRow}>
+                    <Pressable onPress={() => cycleCategory(item)} hitSlop={8}>
+                      <View style={[styles.smallDot, { backgroundColor: categoryColors[item.category] }]} />
                     </Pressable>
+                    <Pressable onPress={() => toggleDailyNoteItem(item.id)} hitSlop={8}>
+                      <Ionicons
+                        name={item.done ? 'checkbox' : 'square-outline'}
+                        size={20}
+                        color={item.done ? theme.accent : theme.textTertiary}
+                      />
+                    </Pressable>
+                    {editingId === item.id ? (
+                      <TextInput
+                        value={editingText}
+                        onChangeText={setEditingText}
+                        onSubmitEditing={() => commitEdit(item)}
+                        onBlur={() => commitEdit(item)}
+                        autoFocus
+                        style={[styles.noteInput, { color: theme.text, borderColor: theme.border }]}
+                      />
+                    ) : (
+                      <Pressable
+                        style={{ flex: 1 }}
+                        onPress={() => {
+                          setEditingId(item.id);
+                          setEditingText(item.text);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.noteText,
+                            { color: item.done ? theme.textTertiary : theme.text },
+                            item.done && styles.noteTextDone,
+                          ]}
+                        >
+                          {item.text}
+                        </Text>
+                      </Pressable>
+                    )}
+                    <Pressable
+                      onPress={() => setMovingId(movingId === item.id ? null : item.id)}
+                      hitSlop={8}
+                    >
+                      <Ionicons
+                        name="calendar-outline"
+                        size={16}
+                        color={movingId === item.id ? theme.accent : theme.textTertiary}
+                      />
+                    </Pressable>
+                    <Pressable onPress={() => deleteDailyNoteItem(item.id)} hitSlop={8}>
+                      <Ionicons name="trash-outline" size={16} color={theme.textTertiary} />
+                    </Pressable>
+                  </View>
+                  {movingId === item.id && (
+                    <View style={styles.moveRow}>
+                      <Text style={[styles.moveLabel, { color: theme.textTertiary }]}>Move to</Text>
+                      <Pressable
+                        onPress={() => shiftTaskDate(item, -1)}
+                        style={[styles.dateStepperButton, { borderColor: theme.border }]}
+                        hitSlop={8}
+                      >
+                        <Ionicons name="chevron-back" size={14} color={theme.text} />
+                      </Pressable>
+                      <Text style={[styles.moveDateLabel, { color: theme.text }]}>
+                        {format(parseISO(item.date), 'EEE, MMM d')}
+                      </Text>
+                      <Pressable
+                        onPress={() => shiftTaskDate(item, 1)}
+                        style={[styles.dateStepperButton, { borderColor: theme.border }]}
+                        hitSlop={8}
+                      >
+                        <Ionicons name="chevron-forward" size={14} color={theme.text} />
+                      </Pressable>
+                      <Pressable onPress={() => setMovingId(null)} hitSlop={8} style={{ marginLeft: 'auto' }}>
+                        <Text style={[styles.moveDoneText, { color: theme.accent }]}>Done</Text>
+                      </Pressable>
+                    </View>
                   )}
-                  <Pressable onPress={() => deleteDailyNoteItem(item.id)} hitSlop={8}>
-                    <Ionicons name="trash-outline" size={16} color={theme.textTertiary} />
-                  </Pressable>
                 </View>
               ))}
             </View>
@@ -394,6 +438,16 @@ const styles = StyleSheet.create({
   noteText: { fontSize: 15 },
   noteTextDone: { textDecorationLine: 'line-through' },
   noteInput: { flex: 1, fontSize: 15, borderBottomWidth: 1, paddingVertical: 2 },
+  moveRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+    paddingLeft: 32,
+  },
+  moveLabel: { fontSize: 12.5 },
+  moveDateLabel: { fontSize: 13, fontWeight: '600', minWidth: 92 },
+  moveDoneText: { fontSize: 13, fontWeight: '600' },
   categoryPicker: { flexDirection: 'row', gap: 8, marginTop: 16 },
   categoryChip: {
     flexDirection: 'row',

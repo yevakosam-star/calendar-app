@@ -21,10 +21,6 @@ export default function RootLayout() {
               name="note/[id]"
               options={{ presentation: 'modal' }}
             />
-            <Stack.Screen
-              name="ask-ai"
-              options={{ presentation: 'modal' }}
-            />
           </Stack>
           <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
         </DataProvider>

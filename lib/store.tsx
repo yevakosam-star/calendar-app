@@ -90,6 +90,7 @@ type Ctx = State & {
   toggleDailyNoteItem: (id: string) => void;
   updateDailyNoteItem: (id: string, text: string) => void;
   setDailyNoteCategory: (id: string, category: TaskCategory) => void;
+  moveDailyNoteItem: (id: string, date: string) => void;
   deleteDailyNoteItem: (id: string) => void;
   setWorkingHours: (hours: WorkingHours) => void;
   addNote: () => string;
@@ -540,6 +541,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }));
   }, []);
 
+  const moveDailyNoteItem = useCallback((id: string, date: string) => {
+    setState((prev) => ({
+      ...prev,
+      dailyNotes: prev.dailyNotes.map((n) => (n.id === id ? { ...n, date } : n)),
+    }));
+  }, []);
+
   const deleteDailyNoteItem = useCallback((id: string) => {
     setState((prev) => ({ ...prev, dailyNotes: prev.dailyNotes.filter((n) => n.id !== id) }));
   }, []);
@@ -625,6 +633,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     toggleDailyNoteItem,
     updateDailyNoteItem,
     setDailyNoteCategory,
+    moveDailyNoteItem,
     deleteDailyNoteItem,
     setWorkingHours,
     addNote,
